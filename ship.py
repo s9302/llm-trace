@@ -26,6 +26,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -307,6 +308,11 @@ class Transcript:
 
 class Shipper:
     def __init__(self, cfg):
+        # The URL comes from our own config file, but every request carries the
+        # Langfuse secret key, so refuse anything that isn't HTTPS (no http://,
+        # no file://).
+        if urllib.parse.urlsplit(cfg["url"]).scheme != "https":
+            raise ValueError("Langfuse url must be https://")
         self.url = cfg["url"].rstrip("/") + "/api/public/otel/v1/traces"
         self.auth = "Basic " + base64.b64encode(f"{cfg['public_key']}:{cfg['secret_key']}".encode()).decode()
 
@@ -317,6 +323,7 @@ class Shipper:
         req = urllib.request.Request(self.url, json.dumps(body).encode(), {
             "content-type": "application/json", "authorization": self.auth, "x-langfuse-ingestion-version": "4"})
         try:
+            # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  (scheme checked in __init__)
             with urllib.request.urlopen(req, timeout=60) as r:
                 result = json.load(r)
         except urllib.error.HTTPError as e:

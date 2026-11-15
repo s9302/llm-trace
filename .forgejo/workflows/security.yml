@@ -2,7 +2,8 @@
 #   gitleaks: secrets anywhere in git history
 #   semgrep:  static analysis for bug classes (injection, XSS, unsafe crypto, ...)
 #   trivy:    known-vulnerable dependencies and IaC/Dockerfile misconfigurations
-# Tool versions and checksums are pinned so a compromised "latest" can't run here.
+# Tool versions, checksums and the checkout action's commit are pinned so a
+# compromised "latest" or a moved tag can't run here.
 name: security
 
 on:
@@ -16,7 +17,7 @@ jobs:
   gitleaks:
     runs-on: docker
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: Install gitleaks 8.30.1
@@ -33,11 +34,16 @@ jobs:
       image: semgrep/semgrep:1.185.0
     steps:
       - name: Checkout
+        # Values go through env, never ${{ }} inside the script, so a crafted
+        # branch name can't inject shell commands.
         env:
           TOKEN: ${{ github.token }}
+          REF: ${{ github.ref_name }}
+          SERVER: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
         run: |
           git -c http.extraHeader="Authorization: token $TOKEN" clone --depth 1 \
-            --branch "${{ github.ref_name }}" "${{ github.server_url }}/${{ github.repository }}.git" src
+            --branch "$REF" -- "$SERVER/$REPO.git" src
       - name: Scan
         working-directory: src
         run: semgrep scan --config p/default --metrics=off --error --exclude-rule generic.secrets.security.detected-generic-secret
@@ -45,7 +51,7 @@ jobs:
   trivy:
     runs-on: docker
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Install trivy 0.76.2
         run: |
           curl -fsSLo /tmp/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz
